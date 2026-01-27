@@ -119,7 +119,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received file: %s (%d bytes)", safeFilename, header.Size)
 
 	// Create temp file for the upload
-	tempFile, err := os.CreateTemp("", "yara-scan-*")
+	// Uses scanTempDir which has OpenShift-compatible permissions (GID 0)
+	tempFile, err := os.CreateTemp(scanTempDir, "yara-scan-*")
 	if err != nil {
 		log.Printf("Failed to create temp file: %v", err)
 		sendError(w, "Internal server error", http.StatusInternalServerError)
