@@ -13,7 +13,7 @@ An internal HTTP service for scanning files with [YARA-X](https://virustotal.git
 - **Simple REST API** — Upload files via multipart form, get JSON results
 - **Archive Support** — Automatically extracts and scans ZIP archives
 - **Zip Bomb Protection** — Configurable limits on file count, size, and extraction
-- **Security Hardened** — Non-root user, HTTP timeouts, sanitized logging
+- **Security Hardened** — Non-root user, HTTP timeouts, sanitized logging, OpenShift compatible
 - **Fully Configurable** — All limits and timeouts via environment variables
 - **Health Checks** — Built-in endpoint for liveness/readiness probes
 
@@ -171,17 +171,25 @@ docker run -d -p 9001:9001 -v ./rules:/rules:ro yara-rest
 
 ## Deployment
 
+### OpenShift Compatibility
+
+The container follows the **GID 0 pattern** for OpenShift compatibility:
+
+- Files owned by `1001:0` (UID 1001, GID 0)
+- Permissions allow group write (`ug+rwx`)
+- Works with random UIDs assigned by OpenShift (always GID 0)
+
 ### Filesystem Requirements
 
 | Path | Access | Purpose |
 |------|--------|---------|
-| `/tmp` | Read-Write | Extraction workspace |
+| `/tmp/scans` | Read-Write | Scan workspace |
 | `/rules` | Read-Only | YARA-X rules |
 | `/app` | Read-Only | Application binary |
 
-Supports **read-only root filesystem** when `/tmp` is mounted as a writable volume.
+Supports **read-only root filesystem** when `/tmp/scans` is mounted as a writable volume.
 
-### Sizing `/tmp`
+### Sizing `/tmp/scans`
 
 Each concurrent scan needs temp space for the uploaded file and extracted contents:
 
@@ -189,13 +197,45 @@ Each concurrent scan needs temp space for the uploaded file and extracted conten
 tmp_size = (MAX_UPLOAD_SIZE_MB + MAX_EXTRACTED_SIZE_MB) × concurrent_scans
 ```
 
-| Concurrent Scans | `/tmp` Size |
+| Concurrent Scans | Volume Size |
 |------------------|-------------|
 | 1 | 1.5 GB |
 | 5 | 7 GB |
 | 20 | 30 GB |
 
 Use **tmpfs** (memory-backed) for performance, or **disk** for high concurrency with limited RAM.
+
+### Resource Limits
+
+Recommended Kubernetes/OpenShift resource configuration:
+
+```yaml
+resources:
+  limits:
+    cpu: "2"
+    memory: "2Gi"
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+```
+
+For read-only root filesystem, mount a writable volume for scans:
+
+```yaml
+volumeMounts:
+- name: scans
+  mountPath: /tmp/scans
+volumes:
+- name: scans
+  emptyDir: {}
+```
 
 ### Resource Guidelines
 

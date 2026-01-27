@@ -47,22 +47,25 @@ RUN curl -Lo /tmp/yr.tar.gz "https://github.com/VirusTotal/yara-x/releases/downl
     chmod +x /usr/local/bin/yr && \
     rm /tmp/yr.tar.gz
 
-# Create non-root user and directories
-# Using specific UID for consistency across environments
-RUN useradd -m -u 1000 -s /bin/false scanner && \
-    mkdir -p /rules && \
-    chown scanner:scanner /rules
+# Create directories with OpenShift-compatible permissions
+# OpenShift runs containers with random UIDs but always GID 0 (root group)
+# Using 1001:0 ownership and ug+rwx allows any UID in GID 0 to write
+RUN mkdir -p /rules /tmp/scans && \
+    chown -R 1001:0 /rules /tmp/scans && \
+    chmod -R ug+rwx /tmp/scans
 
 WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/yara-rest .
 
-# Change ownership of app directory
-RUN chown -R scanner:scanner /app
+# Set ownership for GID 0 pattern (OpenShift compatibility)
+RUN chown -R 1001:0 /app && \
+    chmod -R ug+rx /app
 
-# Run as non-root user
-USER scanner
+# Run as non-root user (UID 1001)
+# OpenShift will override this with a random UID, but GID 0 is preserved
+USER 1001
 
 # =============================================================================
 # Environment Variables

@@ -19,6 +19,9 @@ import (
 // YARA-X binary path
 const yaraBinary = "/usr/local/bin/yr"
 
+// Scan temp directory - writable by any UID in GID 0 (OpenShift compatible)
+const scanTempDir = "/tmp/scans"
+
 // yaraXOutput represents a single line of YARA-X NDJSON output
 type yaraXOutput struct {
 	Path  string      `json:"path"`
@@ -85,7 +88,8 @@ func (s *Scanner) ScanFile(filePath string) (*ScanResult, error) {
 	}
 
 	// Create temp directory for scanning
-	tempDir, err := os.MkdirTemp("", "yara-extract-")
+	// Uses scanTempDir which has OpenShift-compatible permissions (GID 0)
+	tempDir, err := os.MkdirTemp(scanTempDir, "yara-extract-")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
 	}
