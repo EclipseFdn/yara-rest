@@ -1,3 +1,3 @@
-module github.com/yeeth-security/yara-rest
+module github.com/EclipseFdn/yara-rest
 
-go 1.21
+go 1.25

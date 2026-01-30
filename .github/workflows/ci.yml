@@ -1,0 +1,33 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Test go${{ matrix.goVersion}}.x ${{ matrix.goArch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goVersion: "1.25"
+            GOARCH: "amd64"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ matrix.goVersion }}
+      - run: make all
+        env:
+          GOARCH: ${{ matrix.GOARCH }}

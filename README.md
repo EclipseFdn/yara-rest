@@ -1,7 +1,7 @@
 # YARA REST
 
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
+[![License](https://img.shields.io/badge/License-EPL2.0-blue.svg)](LICENSE.md)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](Dockerfile)
 
 An internal HTTP service for scanning files with [YARA-X](https://virustotal.github.io/yara-x/) rules. Designed for use behind a reverse proxy or within a private network.
@@ -284,4 +284,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE.md](LICENSE.md) for details.
+This project is licensed under the EPL 2.0 License — see [LICENSE.md](LICENSE.md) for details.
