@@ -1,6 +1,6 @@
 # YARA REST
 
-[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/EclipseFdn/yara-rest)](go.mod)
 [![License](https://img.shields.io/badge/License-EPL2.0-blue.svg)](LICENSE.md)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](Dockerfile)
 
