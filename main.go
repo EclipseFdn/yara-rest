@@ -141,7 +141,15 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	result, err := scanner.ScanFile(tempFile.Name())
 	if err != nil {
 		log.Printf("Scan failed: %v", err)
-		sendError(w, "Scan failed", http.StatusInternalServerError)
+
+		errorResponse := ScanResponse{
+			Matches:      nil,
+			ScannedFiles: 0,
+			ScanTimeMs:   time.Since(startTime).Milliseconds(),
+			Error:        err.Error(),
+		}
+
+		sendResponse(w, errorResponse)
 		return
 	}
 
@@ -156,8 +164,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		safeFilename, len(response.Matches), response.ScannedFiles, response.ScanTimeMs)
 
 	// Send JSON response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	sendResponse(w, response)
 }
 
 // handleHealth handles GET /health requests
@@ -178,6 +185,12 @@ func sendError(w http.ResponseWriter, message string, status int) {
 	json.NewEncoder(w).Encode(ScanResponse{
 		Error: message,
 	})
+}
+
+func sendResponse(w http.ResponseWriter, response interface{}) {
+	// Send JSON response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // sanitizeFilename removes potentially dangerous characters from filenames
