@@ -194,16 +194,33 @@ func copyPart(part *multipart.Part, dir string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if _, err := io.Copy(tempFile, part); err != nil {
+	if err := copyUpload(tempFile, part); err != nil {
 		tempFile.Close()
 		os.Remove(tempFile.Name())
-		return "", "", classifyReadError(err)
+		return "", "", err
 	}
 	if err := tempFile.Close(); err != nil {
 		os.Remove(tempFile.Name())
 		return "", "", err
 	}
 	return tempFile.Name(), part.FileName(), nil
+}
+
+// copyUpload copies src to dst. Only src failures are classified as request
+// errors; a dst failure (disk full, I/O error) stays a plain server error.
+func copyUpload(dst io.Writer, src io.Reader) error {
+	_, err := io.Copy(dst, readClassifier{src})
+	return err
+}
+
+type readClassifier struct{ io.Reader }
+
+func (r readClassifier) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err != nil && err != io.EOF {
+		err = classifyReadError(err)
+	}
+	return n, err
 }
 
 // classifyReadError keeps size-limit errors intact and marks any other

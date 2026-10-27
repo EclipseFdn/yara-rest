@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -417,4 +418,40 @@ type zeroReader struct{}
 func (zeroReader) Read(p []byte) (int, error) {
 	clear(p)
 	return len(p), nil
+}
+
+type errWriter struct{ err error }
+
+func (w errWriter) Write([]byte) (int, error) { return 0, w.err }
+
+type errReader struct{ err error }
+
+func (r errReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestCopyUploadWriteErrorIsNotBadRequest(t *testing.T) {
+	err := copyUpload(errWriter{syscall.ENOSPC}, strings.NewReader("data"))
+
+	if !errors.Is(err, syscall.ENOSPC) {
+		t.Fatalf("err = %v, want ENOSPC", err)
+	}
+	if errors.Is(err, errBadForm) {
+		t.Errorf("write failure classified as bad request: %v", err)
+	}
+}
+
+func TestCopyUploadReadErrorIsBadRequest(t *testing.T) {
+	err := copyUpload(io.Discard, errReader{io.ErrUnexpectedEOF})
+
+	if !errors.Is(err, errBadForm) {
+		t.Errorf("err = %v, want errBadForm", err)
+	}
+}
+
+func TestCopyUploadKeepsSizeLimitError(t *testing.T) {
+	err := copyUpload(io.Discard, errReader{&http.MaxBytesError{Limit: 1}})
+
+	var tooLarge *http.MaxBytesError
+	if !errors.As(err, &tooLarge) || errors.Is(err, errBadForm) {
+		t.Errorf("err = %v, want unwrapped *http.MaxBytesError", err)
+	}
 }
