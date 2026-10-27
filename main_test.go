@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -29,6 +32,11 @@ func init() {
 		IdleTimeout:       120 * time.Second,
 	}
 	scanner = NewScanner(config)
+
+	// handleScan writes uploads to scanTempDir, which only exists in the container image.
+	if err := os.MkdirAll(scanTempDir, 0o777); err != nil {
+		panic(err)
+	}
 }
 
 func TestHandleHealth(t *testing.T) {
@@ -330,4 +338,120 @@ func TestIntegrationScanWithMatch(t *testing.T) {
 	// Note: match count depends on rules in ./test directory
 	t.Logf("Scan result: %d matches, %d files, %dms",
 		len(resp.Matches), resp.ScannedFiles, resp.ScanTimeMs)
+}
+
+func multipartRequest(t *testing.T, fields map[string]string, content io.Reader) *http.Request {
+	t.Helper()
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
+	go func() {
+		for k, v := range fields {
+			writer.WriteField(k, v)
+		}
+		part, _ := writer.CreateFormFile("file", "big.vsix")
+		_, err := io.Copy(part, content)
+		writer.Close()
+		pw.CloseWithError(err)
+	}()
+	req := httptest.NewRequest(http.MethodPost, "/scan", pr)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
+}
+
+func TestSaveUploadStreamsToDisk(t *testing.T) {
+	const size = 64 << 20
+	old := config.MaxUploadSize
+	config.MaxUploadSize = 2 * size
+	defer func() { config.MaxUploadSize = old }()
+
+	dir := t.TempDir()
+	req := multipartRequest(t, map[string]string{"note": "x"}, io.LimitReader(zeroReader{}, size))
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	path, filename, err := saveUpload(httptest.NewRecorder(), req, dir)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if filename != "big.vsix" {
+		t.Errorf("filename = %q, want big.vsix", filename)
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() != size {
+		t.Errorf("saved file: info=%v err=%v, want %d bytes", info, err, size)
+	}
+	// Buffering the upload would allocate at least its full size.
+	if alloc := after.TotalAlloc - before.TotalAlloc; alloc > size/4 {
+		t.Errorf("allocated %d bytes for a %d byte upload", alloc, size)
+	}
+}
+
+func TestSaveUploadTooLarge(t *testing.T) {
+	dir := t.TempDir()
+	req := multipartRequest(t, nil, io.LimitReader(zeroReader{}, config.MaxUploadSize+1))
+
+	_, _, err := saveUpload(httptest.NewRecorder(), req, dir)
+
+	var tooLarge *http.MaxBytesError
+	if !errors.As(err, &tooLarge) {
+		t.Fatalf("err = %v, want *http.MaxBytesError", err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("temp file left behind: %v", entries)
+	}
+}
+
+func TestHandleScanTooLarge(t *testing.T) {
+	req := multipartRequest(t, nil, io.LimitReader(zeroReader{}, config.MaxUploadSize+1))
+	w := httptest.NewRecorder()
+
+	handleScan(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+type errWriter struct{ err error }
+
+func (w errWriter) Write([]byte) (int, error) { return 0, w.err }
+
+type errReader struct{ err error }
+
+func (r errReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestCopyUploadWriteErrorIsNotBadRequest(t *testing.T) {
+	err := copyUpload(errWriter{syscall.ENOSPC}, strings.NewReader("data"))
+
+	if !errors.Is(err, syscall.ENOSPC) {
+		t.Fatalf("err = %v, want ENOSPC", err)
+	}
+	if errors.Is(err, errBadForm) {
+		t.Errorf("write failure classified as bad request: %v", err)
+	}
+}
+
+func TestCopyUploadReadErrorIsBadRequest(t *testing.T) {
+	err := copyUpload(io.Discard, errReader{io.ErrUnexpectedEOF})
+
+	if !errors.Is(err, errBadForm) {
+		t.Errorf("err = %v, want errBadForm", err)
+	}
+}
+
+func TestCopyUploadKeepsSizeLimitError(t *testing.T) {
+	err := copyUpload(io.Discard, errReader{&http.MaxBytesError{Limit: 1}})
+
+	var tooLarge *http.MaxBytesError
+	if !errors.As(err, &tooLarge) || errors.Is(err, errBadForm) {
+		t.Errorf("err = %v, want unwrapped *http.MaxBytesError", err)
+	}
 }
