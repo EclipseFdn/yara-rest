@@ -31,6 +31,11 @@ func init() {
 		IdleTimeout:       120 * time.Second,
 	}
 	scanner = NewScanner(config)
+
+	// handleScan writes uploads to scanTempDir, which only exists in the container image.
+	if err := os.MkdirAll(scanTempDir, 0o777); err != nil {
+		panic(err)
+	}
 }
 
 func TestHandleHealth(t *testing.T) {
