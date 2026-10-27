@@ -1,6 +1,6 @@
 ## Yara Rest Service Change Log
 
-### [Unreleased]
+### [v0.1.2] (27/10/2026)
 
 Stream uploads to disk instead of buffering them in memory; uploads over `MAX_UPLOAD_SIZE_MB` now get a 413 response
 
