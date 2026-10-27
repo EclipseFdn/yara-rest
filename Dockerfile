@@ -37,7 +37,7 @@ ARG YARA_X_VERSION
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
-        curl=7.88.1-10+deb12u14 && \
+        curl=7.88.1-10+deb12u15 && \
     rm -rf /var/lib/apt/lists/*
 
 # Download and install YARA-X binary
